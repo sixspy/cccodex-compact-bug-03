@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.db import get_db
 from app.services.errors import ServiceError
+from app.services.void_ledger import ghost_count
 
 
 def list_jobs(db_path: str | None = None) -> list[dict]:
@@ -29,9 +30,13 @@ def start_rewrite(plan_id: int, db_path: str | None = None) -> dict:
         ).fetchone()
         if running:
             raise ServiceError("已有在途合并任务", 409)
+        if ghost_count(plan_id, db_path) > 0:
+            raise ServiceError(
+                "计划存在作废幽灵挂载，请先在小文件清单清理幽灵后再合并", 409
+            )
         items = conn.execute(
             "SELECT f.* FROM plan_items i JOIN lake_files f ON f.id=i.file_id "
-            "WHERE i.plan_id=? AND f.status IN ('已入计划','作废')",
+            "WHERE i.plan_id=? AND f.status='已入计划'",
             (plan_id,),
         ).fetchall()
         if not items:

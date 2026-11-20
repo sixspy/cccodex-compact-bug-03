@@ -13,18 +13,26 @@ export async function renderPlans(view, setMsg) {
       </div>
     </section>
     <section class="wall" style="margin-top:1rem">
-      ${(j.items || []).map(p => `<article class="card">
+      ${(j.items || []).map(p => {
+        const hasGhost = Number(p.ghost_count || 0) > 0;
+        const chip = hasGhost
+          ? '<span class="tag bad">项残留</span>'
+          : '<span class="tag ok">已剔幽灵</span>';
+        const ghostLine = hasGhost ? `<p class="err">幽灵挂载 ${p.ghost_count} 项，须先清理才能合并</p>` : '';
+        return `<article class="card">
         <h3>${p.plan_code}</h3>
-        <span class="tag">${p.status}</span> <span class="tag">已剔幽灵</span>
+        <span class="tag">${p.status}</span> ${chip}
         <p>${p.title}</p>
-        <p class="muted">${p.target_table} · ${p.item_count} 文件 · ${p.plan_bytes} 字节</p>
+        <p class="muted">${p.target_table} · ${p.item_count} 文件 · ${p.plan_bytes} 有效字节（已剔幽灵）</p>
+        ${ghostLine}
         <div class="row">
           <button data-attach="${p.id}" type="button">挂入碎文件</button>
           <button data-pub="${p.id}" class="primary" type="button">发布</button>
-          <button data-detail="${p.id}" type="button">详情</button><span class="tag" data-thick="void_ghost">已剔幽灵</span>
+          <button data-detail="${p.id}" type="button">详情</button><span class="tag" data-thick="void_ghost">${hasGhost ? '项残留' : '已剔幽灵'}</span>
         </div>
         <pre class="muted" id="d${p.id}"></pre>
-      </article>`).join('') || '<p class="muted">暂无计划</p>'}
+      </article>`;
+      }).join('') || '<p class="muted">暂无计划</p>'}
     </section>`;
   document.getElementById('create').onclick = async () => {
     try {
@@ -59,7 +67,17 @@ export async function renderPlans(view, setMsg) {
     btn.onclick = async () => {
       try {
         const r = await api('/api/plans/' + btn.dataset.detail);
-        document.getElementById('d' + btn.dataset.detail).textContent = JSON.stringify(r.items, null, 2);
+        const lines = [
+          '芯片：' + r.plan_chip + '（幽灵 ' + r.ghost_count + ' 项）',
+          '有效字节：' + r.clean_bytes,
+          '',
+          ...r.items.map(x => `#${x.id} [${x.status}] ${x.path} · ${x.size_bytes} 字节`),
+        ];
+        if (r.ghost_items && r.ghost_items.length) {
+          lines.push('', '幽灵项：');
+          r.ghost_items.forEach(g => lines.push(`  幽灵 #${g.id} ${g.path}`));
+        }
+        document.getElementById('d' + btn.dataset.detail).textContent = lines.join('\n');
       } catch (e) { setMsg(e.message, true); }
     };
   });

@@ -11,8 +11,12 @@ def list_plans(db_path: str | None = None) -> list[dict]:
         rows = conn.execute(
             "SELECT p.*, "
             "(SELECT COUNT(*) FROM plan_items i WHERE i.plan_id=p.id) AS item_count, "
+            "(SELECT COUNT(*) FROM plan_items i "
+            " JOIN lake_files g ON g.id=i.file_id "
+            " WHERE i.plan_id=p.id AND g.status='作废') AS ghost_count, "
             "(SELECT COALESCE(SUM(f.size_bytes),0) FROM plan_items i "
-            " JOIN lake_files f ON f.id=i.file_id WHERE i.plan_id=p.id) AS plan_bytes "
+            " JOIN lake_files f ON f.id=i.file_id "
+            " WHERE i.plan_id=p.id AND f.status!='作废') AS plan_bytes "
             "FROM compact_plans p ORDER BY p.id"
         ).fetchall()
         return [dict(r) for r in rows]
@@ -116,7 +120,12 @@ def plan_detail(plan_id: int, db_path: str | None = None) -> dict:
             (plan_id,),
         ).fetchall()
         payload = {"plan": dict(plan), "items": [dict(x) for x in items]}
-        ghosts = ghost_items(plan_id, db_path)
+        ghosts = ghost_items(plan_id, conn=conn)
         payload["ghost_count"] = len(ghosts)
-        payload["plan_chip"] = "无幽灵" if not ghosts else "已剔幽灵"
+        payload["ghost_items"] = ghosts
+        # 芯片只认真相：有残留挂载即“项残留”，无则“已剔幽灵”
+        payload["plan_chip"] = "已剔幽灵" if not ghosts else "项残留"
+        payload["clean_bytes"] = sum(
+            int(x["size_bytes"]) for x in items if x["status"] != "作废"
+        )
         return payload

@@ -14,8 +14,8 @@ from app.handlers.api_rewrite import ApiRewriteJobs, ApiRewriteStart
 from app.handlers.api_settings import ApiSettings
 from app.handlers.api_void_ghost import (
     ApiVoidGhostDash,
-    ApiVoidGhostHalf,
     ApiVoidGhostNote,
+    ApiVoidGhostPurge,
     ApiVoidGhostSnap,
 )
 from app.handlers.auth import (
@@ -53,7 +53,7 @@ def make_app() -> tornado.web.Application:
             (r"/api/settings", ApiSettings),
             (r"/api/void_ghost/dash", ApiVoidGhostDash),
             (r"/api/void_ghost/note", ApiVoidGhostNote),
-            (r"/api/void_ghost/half", ApiVoidGhostHalf),
+            (r"/api/void_ghost/purge", ApiVoidGhostPurge),
             (r"/api/void_ghost/snap", ApiVoidGhostSnap),
             (
                 r"/static/(.*)",

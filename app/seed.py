@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.db import SCHEMA, get_db, init_schema
 
 
-SCHEMA_VERSION = "compact-v2"
+SCHEMA_VERSION = "compact-v3"
 
 
 def _schema_compatible(conn) -> bool:
@@ -28,6 +28,7 @@ def seed_if_needed(db_path: str | None = None) -> dict:
         ).fetchone()
         if not _schema_compatible(conn) or (ver and ver["value"] != SCHEMA_VERSION):
             for table in (
+                "void_vouchers",
                 "volume_reports",
                 "rewrite_jobs",
                 "plan_items",
@@ -84,11 +85,6 @@ def seed_if_needed(db_path: str | None = None) -> dict:
             (SCHEMA_VERSION,),
         )
         conn.execute("INSERT INTO meta(key, value) VALUES ('lab','湖表压实台')")
-        try:
-            from app.services.void_ghost_surface import seed_skew
-            seed_skew(db_path)
-        except Exception:
-            pass
         return {
             "seeded": True,
             "files": len(files),
@@ -101,6 +97,7 @@ def reset_seed(db_path: str | None = None) -> None:
     init_schema(db_path)
     with get_db(db_path) as conn:
         for table in (
+            "void_vouchers",
             "volume_reports",
             "rewrite_jobs",
             "plan_items",

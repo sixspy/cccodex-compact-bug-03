@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.db import get_db
 from app.services.errors import ServiceError
+from app.services.void_ledger import ghost_count
 
 
 def list_reports(db_path: str | None = None) -> list[dict]:
@@ -21,9 +22,14 @@ def run_reconcile(plan_id: int, db_path: str | None = None) -> dict:
         ).fetchone()
         if not plan:
             raise ServiceError("计划不存在", 404)
+        if ghost_count(plan_id, db_path) > 0:
+            raise ServiceError(
+                "计划挂载含作废幽灵，体积已偏；请先清理幽灵再跑对账", 409
+            )
         before = conn.execute(
             "SELECT COALESCE(SUM(f.size_bytes),0) AS b, COUNT(*) AS c "
-            "FROM plan_items i JOIN lake_files f ON f.id=i.file_id WHERE i.plan_id=?",
+            "FROM plan_items i JOIN lake_files f ON f.id=i.file_id "
+            "WHERE i.plan_id=? AND f.status!='作废'",
             (plan_id,),
         ).fetchone()
         job = conn.execute(

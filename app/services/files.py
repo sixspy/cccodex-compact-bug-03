@@ -10,11 +10,21 @@ def list_files(table_name: str | None = None, db_path: str | None = None) -> lis
     with get_db(db_path) as conn:
         if table_name:
             rows = conn.execute(
-                "SELECT * FROM lake_files WHERE table_name=? ORDER BY id",
+                "SELECT f.*, "
+                "(SELECT COUNT(*) FROM plan_items i WHERE i.file_id=f.id) AS mount_count, "
+                "(SELECT COUNT(*) FROM plan_items i WHERE i.file_id=f.id) > 0 "
+                "AND f.status='作废' AS ghost_mount "
+                "FROM lake_files f WHERE f.table_name=? ORDER BY f.id",
                 (table_name,),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM lake_files ORDER BY id").fetchall()
+            rows = conn.execute(
+                "SELECT f.*, "
+                "(SELECT COUNT(*) FROM plan_items i WHERE i.file_id=f.id) AS mount_count, "
+                "(SELECT COUNT(*) FROM plan_items i WHERE i.file_id=f.id) > 0 "
+                "AND f.status='作废' AS ghost_mount "
+                "FROM lake_files f ORDER BY f.id"
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -57,12 +67,14 @@ def void_file(file_id: int, db_path: str | None = None) -> dict:
         conn.execute(
             "UPDATE lake_files SET status='作废' WHERE id=?", (file_id,)
         )
-        record_void(file_id, db_path)
-        # silent: leave plan_items so ghosts remain mountable
+        # 同事务写作废凭证；挂载行保留为幽灵，须经 purge_ghosts 彻清
+        voucher = record_void(file_id, conn=conn)
         out = conn.execute(
             "SELECT * FROM lake_files WHERE id=?", (file_id,)
         ).fetchone()
-        return dict(out)
+        result = dict(out)
+        result["voucher_id"] = voucher["id"]
+        return result
 
 
 def table_stats(db_path: str | None = None) -> list[dict]:

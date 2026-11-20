@@ -3,7 +3,10 @@ import { api } from '../api.js';
 export async function renderRewrite(view, setMsg) {
   const plans = await api('/api/plans');
   const jobs = await api('/api/rewrite/jobs');
-  const options = (plans.items || []).map(p => `<option value="${p.id}">${p.plan_code} · ${p.status}</option>`).join('');
+  const options = (plans.items || []).map(p => {
+    const ghost = Number(p.ghost_count || 0) > 0;
+    return `<option value="${p.id}" ${ghost ? 'disabled' : ''}>${p.plan_code} · ${p.status}${ghost ? ' · 含幽灵' + p.ghost_count + '项（先清理）' : ''}</option>`;
+  }).join('');
   view.innerHTML = `
     <section class="card">
       <h2>重写合并</h2>

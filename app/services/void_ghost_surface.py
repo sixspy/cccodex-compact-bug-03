@@ -1,82 +1,38 @@
-"""作废幽灵：展示面与写库面双源，半修只碰展示。"""
+"""作废幽灵展示面：芯片只从库内真实残留推导，不再有独立双源。
+
+彻清路线下 panel_chip 与 truth 永远同源：
+- 库里仍有幽灵挂载行 -> 项残留
+- 无残留 -> 已剔幽灵
+不存在“只刷展示不删挂载行”的半修。
+"""
 from __future__ import annotations
 
 from app.db import get_db
+from app.services.void_ledger import ghost_count, ghost_mounts, list_vouchers
 
 _SLUG = "void_ghost"
 _OK = "已剔幽灵"
 _BAD = "项残留"
 
 
-def panel_chip(db_path: str | None = None) -> str:
-    with get_db(db_path) as conn:
-        row = conn.execute(
-            "SELECT value FROM meta WHERE key=?",
-            (f"{_SLUG}_panel_chip",),
-        ).fetchone()
-        return row["value"] if row else _OK
-
-
 def truth_flag(db_path: str | None = None) -> str:
-    with get_db(db_path) as conn:
-        row = conn.execute(
-            "SELECT value FROM meta WHERE key=?",
-            (f"{_SLUG}_truth",),
-        ).fetchone()
-        return row["value"] if row else _BAD
+    return _BAD if ghost_count(None, db_path) > 0 else _OK
 
 
-def paint_ok(db_path: str | None = None) -> str:
-    with get_db(db_path) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_panel_chip", _OK),
-        )
-    return _OK
-
-
-def seed_skew(db_path: str | None = None) -> None:
-    with get_db(db_path) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_panel_chip", _OK),
-        )
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_truth", _BAD),
-        )
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_counter", "0"),
-        )
-
-
-def bump_counter(db_path: str | None = None) -> int:
-    with get_db(db_path) as conn:
-        row = conn.execute(
-            "SELECT value FROM meta WHERE key=?",
-            (f"{_SLUG}_counter",),
-        ).fetchone()
-        n = int(row["value"]) + 1 if row else 1
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_counter", str(n)),
-        )
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_panel_chip", _OK),
-        )
-        return n
+def panel_chip(db_path: str | None = None) -> str:
+    # 展示芯片即真相，无独立存储
+    return truth_flag(db_path)
 
 
 def snapshot(db_path: str | None = None) -> dict:
-    seed_skew(db_path)
     return {
         "title": "作废幽灵",
         "panel_chip": panel_chip(db_path),
         "truth": truth_flag(db_path),
-        "counter": bump_counter(db_path),
-        "aligned": panel_chip(db_path) == truth_flag(db_path),
+        "ghost_count": ghost_count(None, db_path),
+        "mounts": ghost_mounts(db_path),
+        "vouchers": list_vouchers(db_path),
+        "aligned": True,
     }
 
 
@@ -91,18 +47,17 @@ def list_events(db_path: str | None = None) -> list[dict]:
 
 def record_event(note: str, db_path: str | None = None) -> dict:
     with get_db(db_path) as conn:
-        c = bump_counter(db_path)
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key=?",
+            (f"{_SLUG}_counter",),
+        ).fetchone()
+        n = int(row["value"]) + 1 if row else 1
         conn.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
-            (f"{_SLUG}_evt_{c}", note or _BAD),
+            (f"{_SLUG}_counter", str(n)),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+            (f"{_SLUG}_evt_{n}", note or _BAD),
         )
     return snapshot(db_path)
-
-
-def reconcile_surface(db_path: str | None = None) -> dict:
-    paint_ok(db_path)
-    return {
-        "panel_chip": panel_chip(db_path),
-        "truth": truth_flag(db_path),
-        "half_fixed": True,
-    }

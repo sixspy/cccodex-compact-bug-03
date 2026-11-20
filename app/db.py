@@ -58,6 +58,20 @@ CREATE TABLE IF NOT EXISTS lab_settings (
   label TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS void_vouchers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_id INTEGER NOT NULL,
+  plan_id INTEGER,
+  path TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  voided_at TEXT NOT NULL,
+  revoked_at TEXT,
+  revoke_note TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_void_vouchers_file ON void_vouchers(file_id);
+CREATE INDEX IF NOT EXISTS idx_void_vouchers_plan ON void_vouchers(plan_id);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -68,9 +82,10 @@ CREATE TABLE IF NOT EXISTS meta (
 def connect(db_path: str | None = None) -> sqlite3.Connection:
     path = db_path or Config.database()
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

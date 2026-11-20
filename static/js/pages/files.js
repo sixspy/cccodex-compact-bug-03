@@ -5,7 +5,7 @@ export async function renderFiles(view, setMsg) {
   view.innerHTML = `
     <section class="card">
       <h2>小文件清单</h2>
-      <p class="muted">登记湖区碎文件；作废后不再进入压实计划。</p>
+      <p class="muted">登记湖区碎文件；作废后生成凭证并从计划挂载中清理，清理前不得进入合并。</p>
       <div class="row">
         <label>路径<input id="path" placeholder="lake/dw_x/part-9.parquet" /></label>
         <label>表名<input id="table" value="dw_orders" /></label>
@@ -19,12 +19,24 @@ export async function renderFiles(view, setMsg) {
         <p class="muted">${s.total_bytes} 字节</p></article>`).join('')}
     </section>
     <section class="wall" style="margin-top:1rem">
-      ${(j.items || []).map(f => `<article class="card">
+      ${(j.items || []).map(f => {
+        const isVoid = f.status === '作废';
+        const ghost = isVoid && f.ghost_mount;
+        const chip = !isVoid
+          ? '<span class="tag ok">已剔幽灵</span>'
+          : ghost
+            ? '<span class="tag bad">项残留</span>'
+            : '<span class="tag ok">已剔幽灵</span>';
+        return `<article class="card">
         <h3>${f.path}</h3>
-        <span class="tag">${f.status}</span> <span class="tag">已剔幽灵</span>
-        <p class="muted">${f.table_name} · ${f.size_bytes} 字节</p>
-        <button data-void="${f.id}" type="button" ${f.status==='已合并'?'disabled':''}>作废</button>
-      </article>`).join('') || '<p class="muted">暂无文件</p>'}
+        <span class="tag ${isVoid ? 'void' : ''}">${f.status}</span> ${chip}
+        <p class="muted">${f.table_name} · ${f.size_bytes} 字节 · 挂载 ${f.mount_count || 0} 个计划</p>
+        <div class="row">
+          <button data-void="${f.id}" type="button" ${f.status==='已合并'?'disabled':''}>作废</button>
+          ${ghost ? `<button class="primary" data-purge="${f.id}" type="button">清理幽灵</button>` : ''}
+        </div>
+      </article>`;
+      }).join('') || '<p class="muted">暂无文件</p>'}
     </section>`;
   document.getElementById('reg').onclick = async () => {
     try {
@@ -41,7 +53,19 @@ export async function renderFiles(view, setMsg) {
     btn.onclick = async () => {
       try {
         await api('/api/files/' + btn.dataset.void + '/void', { method:'POST', body:'{}' });
-        setMsg('已作废');
+        setMsg('已作废并生成作废凭证');
+        await renderFiles(view, setMsg);
+      } catch (e) { setMsg(e.message, true); }
+    };
+  });
+  view.querySelectorAll('[data-purge]').forEach(btn => {
+    btn.onclick = async () => {
+      try {
+        const r = await api('/api/void_ghost/purge', {
+          method: 'POST',
+          body: JSON.stringify({ file_id: Number(btn.dataset.purge) }),
+        });
+        setMsg('已清理幽灵 ' + r.purge.removed + ' 项，剩余 ' + r.purge.remaining_ghosts);
         await renderFiles(view, setMsg);
       } catch (e) { setMsg(e.message, true); }
     };
